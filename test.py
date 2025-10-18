@@ -7,7 +7,9 @@ model = YOLO("yolo11n-pose.pt")  # load an official model
 # model = YOLO("path/to/best.pt")  # load a custom model
 
 # Predict with the model
-results = model("https://gaible.com/wp-content/uploads/2024/08/L-3111-2-scaled.jpg")  # predict on an image
+#results = model("https://gaible.com/wp-content/uploads/2024/08/L-3111-2-scaled.jpg")  # predict on an image
+#results = model("https://a.storyblok.com/f/233931/1299x1654/d3e5a79be4/eu_website_product_headlines_110x140_0224_cc_update.jpg")  # predict on an image
+results = model("https://sc04.alicdn.com/kf/Hc5ed328a057e431eaf6eae60d8bc76b4x.jpeg")
 
 # Process and display results
 for i, result in enumerate(results):
