@@ -193,5 +193,5 @@ for i, result in enumerate(results):
     
     # Save the output image
     output_filename = f"keypoints_vertical_analysis_{i}.jpg"
-    cv2.imwrite(output_filename, cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(output_filename, output_img)  # Removed the incorrect color conversion
     print(f"Output image saved as: {output_filename}")
