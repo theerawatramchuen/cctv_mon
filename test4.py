@@ -149,14 +149,14 @@ def draw_pose_keypoints(image, keypoints, validation_results=None):
     # Draw for each person detected
     for person_idx, person_keypoints in enumerate(keypoints):
         # Draw lines (skeleton)
-        for start_idx, end_idx in skeleton:
-            if (start_idx < len(person_keypoints) and end_idx < len(person_keypoints) and
-                not np.isnan(person_keypoints[start_idx][0]) and 
-                not np.isnan(person_keypoints[end_idx][0])):
+        # for start_idx, end_idx in skeleton:
+        #     if (start_idx < len(person_keypoints) and end_idx < len(person_keypoints) and
+        #         not np.isnan(person_keypoints[start_idx][0]) and 
+        #         not np.isnan(person_keypoints[end_idx][0])):
                 
-                start_point = tuple(map(int, person_keypoints[start_idx]))
-                end_point = tuple(map(int, person_keypoints[end_idx]))
-                cv2.line(image, start_point, end_point, line_color, 1)
+        #         start_point = tuple(map(int, person_keypoints[start_idx]))
+        #         end_point = tuple(map(int, person_keypoints[end_idx]))
+        #         cv2.line(image, start_point, end_point, line_color, 1)
         
         # Draw keypoints and labels
         for i, (x, y) in enumerate(person_keypoints):
@@ -325,7 +325,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             # Draw a rectangle to visualize the processing area
             cv2.rectangle(frame, (start_x, 0), (end_x, height), (0, 255, 255), 1)
             cv2.putText(frame, "Processing Area (Center)", (start_x + 10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 1)
             
             # Add validation info to frame
             #cv2.putText(frame, f"Valid persons: {valid_persons_in_frame}", (10, 60), 
