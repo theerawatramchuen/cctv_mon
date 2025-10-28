@@ -334,7 +334,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             #           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             # Write frame to output video
-            #out.write(frame)
+            out.write(frame)
             
             # Display frame with keypoints
             cv2.imshow('Pose Detection - Output (Center Area)', frame)
