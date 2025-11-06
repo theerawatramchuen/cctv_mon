@@ -103,11 +103,6 @@ def validate_wrist_position(person_kpts, min_percent, max_percent, wrist_type="b
 def setup_video_source(source):
     """Setup video capture based on input source"""
     cap = cv2.VideoCapture(source)
-    
-    # Set buffer size to minimum for RTSP to reduce latency
-    if source.startswith('rtsp://'):
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    
     return cap
 
 def create_video_writer(cap, output_path, fps=30):
@@ -207,25 +202,53 @@ def save_spool_pose_frame(frame, frame_count, person_id, validation_results, sav
     cv2.imwrite(filepath, frame)
     print(f"Spool pose detected! Frame saved: {filepath}")
     
-    # Also save validation results to a text file
-    #results_file = f"spool_pose_{timestamp}_frame{frame_count}_person{person_id}_results.txt"
-    #results_path = os.path.join(save_folder, results_file)
+    # Return the base filename without extension for video clip creation
+    base_filename = f"spool_pose_{timestamp}_frame{frame_count}_person{person_id}"
+    return base_filename
+
+def save_spool_pose_clip(source, start_frame, end_frame, base_filename, save_folder="spool_pose_clips"):
+    """Save a video clip when spool pose is detected"""
+    # Create folder if it doesn't exist
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
     
-    # with open(results_path, 'w') as f:
-    #     f.write(f"Spool Pose Detection Results\n")
-    #     f.write(f"Timestamp: {timestamp}\n")
-    #     f.write(f"Frame: {frame_count}\n")
-    #     f.write(f"Person: {person_id}\n")
-    #     f.write(f"Shoulders: {validation_results['shoulders']['message']}\n")
-    #     f.write(f"Left Wrist: {validation_results['left']['message']}\n")
-    #     f.write(f"Right Wrist: {validation_results['right']['message']}\n")
+    # Create a new video capture for the source
+    clip_cap = cv2.VideoCapture(source)
     
-    # return filepath
+    # Get video properties
+    frame_width = int(clip_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(clip_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(clip_cap.get(cv2.CAP_PROP_FPS))
+    
+    if fps == 0:
+        fps = 30
+    
+    # Set up video writer for the clip
+    clip_filename = f"{base_filename}.mp4"
+    clip_filepath = os.path.join(save_folder, clip_filename)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    clip_writer = cv2.VideoWriter(clip_filepath, fourcc, fps, (frame_width, frame_height))
+    
+    # Set the starting frame position
+    clip_cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    
+    # Read and write frames from start_frame to end_frame
+    for frame_num in range(start_frame, end_frame + 1):
+        ret, frame = clip_cap.read()
+        if not ret:
+            break
+        clip_writer.write(frame)
+    
+    # Release resources
+    clip_cap.release()
+    clip_writer.release()
+    
+    print(f"Spool pose clip saved: {clip_filepath} (frames {start_frame}-{end_frame})")
 
 def process_video(source, output_path, model, confidence_threshold=0.5, 
                   min_vertical_percent=-20, max_vertical_percent=30, 
                   wrist_type="both", max_shoulder_percent=20):
-    """Process video or RTSP stream and save output with spool pose detection"""
+    """Process video file and save output with spool pose detection"""
     
     # Setup video capture
     cap = setup_video_source(source)
@@ -234,12 +257,16 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
         print(f"Error: Could not open video source {source}")
         return
     
+    # Get total frames for reference
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
     # Create video writer
     out, frame_width, frame_height, fps = create_video_writer(cap, output_path)
     
     print(f"Processing video: {source}")
     print(f"Output: {output_path}")
     print(f"Resolution: {frame_width}x{frame_height}, FPS: {fps}")
+    print(f"Total frames: {total_frames}")
     print(f"Spool pose validation parameters:")
     print(f"  Vertical range: [{min_vertical_percent}%, {max_vertical_percent}%]")
     print(f"  Wrist type: {wrist_type}")
@@ -306,8 +333,20 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
                          (wrist_type == "left" and validation_results["left"]["valid"]) or
                          (wrist_type == "right" and validation_results["right"]["valid"]))):
                         
-                        save_spool_pose_frame(frame, frame_count, person_idx + 1, validation_results)
+                        base_filename = save_spool_pose_frame(frame, frame_count, person_idx + 1, validation_results)
                         spool_pose_count += 1
+                        
+                        # Create video clip: rewind 300 frames and capture 600 frames total
+                        clip_start_frame = max(0, frame_count - 300)
+                        clip_end_frame = min(total_frames - 1, frame_count + 299)  # 600 frames total
+                        
+                        # Save the video clip
+                        save_spool_pose_clip(source, clip_start_frame, clip_end_frame, base_filename)
+                        
+                        # Skip ahead to after the clip
+                        if clip_end_frame < total_frames - 1:
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, clip_end_frame + 1)
+                            frame_count = clip_end_frame
                 
                 # Draw adjusted keypoints and validation results on the original frame
                 draw_pose_keypoints(frame, adjusted_keypoints, frame_validation_results)
@@ -328,7 +367,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             cv2.imshow('Pose Detection - Output (Center Area)', frame)
             
             frame_count += 1
-            print(f"Processed frame {frame_count}, Spool poses: {spool_pose_count}", end='\r')
+            print(f"Processed frame {frame_count}/{total_frames}, Spool poses: {spool_pose_count}", end='\r')
         
         # Handle key presses
         key = cv2.waitKey(1) & 0xFF
@@ -363,26 +402,18 @@ def process_specific_sources():
     MAX_SHOULDER_PERCENT = 10
     
     # Option 1: Process MP4 file
-    process_video(r"rtsp_output_evaluation.mp4", "output_video.mp4", model,
+    # process_video(r"rtsp_output_evaluation.mp4", "output_video.mp4", model,
+    #              min_vertical_percent=MIN_VERTICAL_PERCENT,
+    #              max_vertical_percent=MAX_VERTICAL_PERCENT,
+    #              wrist_type=WRIST_TYPE,
+    #              max_shoulder_percent=MAX_SHOULDER_PERCENT)
+    # Option 1: Process MP4 file
+    process_video(r"C:\RecordDownload\NVR_ch1_main_20251104000000_20251104010000.dav", "output_video.mp4", model,
                  min_vertical_percent=MIN_VERTICAL_PERCENT,
                  max_vertical_percent=MAX_VERTICAL_PERCENT,
                  wrist_type=WRIST_TYPE,
                  max_shoulder_percent=MAX_SHOULDER_PERCENT)
     
-    # Option 2: Process RTSP stream
-    # rtsp_url = "rtsp://admin:12345@10.153.62.88"
-    # process_video(rtsp_url, "rtsp_output.mp4", model,
-    #              min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #              max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #              wrist_type=WRIST_TYPE,
-    #              max_shoulder_percent=MAX_SHOULDER_PERCENT)
-    
-    # Option 3: Process webcam (usually index 0)
-    # process_video(0, "webcam_output.mp4", model,
-    #              min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #              max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #              wrist_type=WRIST_TYPE,
-    #              max_shoulder_percent=MAX_SHOULDER_PERCENT)
 
 if __name__ == "__main__":
     # Specific sources directly
