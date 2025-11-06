@@ -402,13 +402,8 @@ def process_specific_sources():
     MAX_SHOULDER_PERCENT = 10
     
     # Option 1: Process MP4 file
-    # process_video(r"rtsp_output_evaluation.mp4", "output_video.mp4", model,
-    #              min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #              max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #              wrist_type=WRIST_TYPE,
-    #              max_shoulder_percent=MAX_SHOULDER_PERCENT)
-    # Option 1: Process MP4 file
-    process_video(r"C:\RecordDownload\NVR_ch1_main_20251104000000_20251104010000.dav", "output_video.mp4", model,
+    process_video(r"rtsp_output_evaluation.mp4", "output_video.mp4", model,
+    #process_video(r"C:\RecordDownload\NVR_ch1_main_20251104000000_20251104010000.dav", "output_video.mp4", model,
                  min_vertical_percent=MIN_VERTICAL_PERCENT,
                  max_vertical_percent=MAX_VERTICAL_PERCENT,
                  wrist_type=WRIST_TYPE,
