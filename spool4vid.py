@@ -1,5 +1,4 @@
 #this code is combinnation of test3-1.py and spool-1-1.py
-#"D:\Downloads\D24_20250528052000.mp4")  # predict on an image
 from ultralytics import YOLO
 import cv2
 import numpy as np
@@ -361,7 +360,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             
             # Write frame to output video
-            out.write(frame)
+            #out.write(frame)
             
             # Display frame with keypoints
             cv2.imshow('Pose Detection - Output (Center Area)', frame)
@@ -402,14 +401,26 @@ def process_specific_sources():
     MAX_SHOULDER_PERCENT = 10
     
     # Option 1: Process MP4 file
-    process_video(r"rtsp_output_evaluation.mp4", "output_video.mp4", model,
-    #process_video(r"C:\RecordDownload\NVR_ch1_main_20251104000000_20251104010000.dav", "output_video.mp4", model,
+    vid = r"C:\RecordDownload\NVR_ch1_main_20251103010000_20251103020000_New.mp4"
+    #vid = r"C:\Users\RYZEN\cctv_mon\rtsp_output_evaluation.mp4"
+    process_video(vid, "output_video.mp4", model,
                  min_vertical_percent=MIN_VERTICAL_PERCENT,
                  max_vertical_percent=MAX_VERTICAL_PERCENT,
                  wrist_type=WRIST_TYPE,
                  max_shoulder_percent=MAX_SHOULDER_PERCENT)
     
-
+import time
 if __name__ == "__main__":
-    # Specific sources directly
+    # Record start time
+    start_time = time.time()
+    print(f"Function started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+    
+    # Execute the function
     process_specific_sources()
+    
+    # Record finish time and calculate total time
+    finish_time = time.time()
+    total_time = finish_time - start_time
+    
+    print(f"Function finished at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(finish_time))}")
+    print(f"Total execution time: {total_time:.2f} seconds")
