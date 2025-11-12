@@ -294,11 +294,10 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
     # Create video writer
-    out, frame_width, frame_height, fps = create_video_writer(cap, output_path)
+    #out, frame_width, frame_height, fps = create_video_writer(cap, output_path)
     
     print(f"Processing video: {source}")
     print(f"Output: {output_path}")
-    print(f"Resolution: {frame_width}x{frame_height}, FPS: {fps}")
     print(f"Total frames: {total_frames}")
     print(f"Spool pose validation parameters:")
     print(f"  Vertical range: [{min_vertical_percent}%, {max_vertical_percent}%]")
@@ -415,7 +414,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
     
     # Release resources
     cap.release()
-    out.release()
+    #out.release()
     cv2.destroyAllWindows()
     print(f"\nProcessing complete! Output saved to: {output_path}")
     print(f"Total frames processed: {frame_count}")
@@ -469,6 +468,15 @@ def process_specific_sources():
     for mp4_file in mp4_files:
         file_path = os.path.join(input_folder, mp4_file)
         
+        # Move the file to processed_files folder first
+        try:
+            destination_path = os.path.join(processed_folder, mp4_file)
+            shutil.move(file_path, destination_path)
+            print(f"Moved {mp4_file} to {processed_folder}")
+        except Exception as e:
+            print(f"Error moving {mp4_file} to processed folder: {e}")
+            continue  # Skip this file if move fails
+        
         print(f"\n{'='*60}")
         print(f"Processing: {mp4_file}")
         print(f"{'='*60}")
@@ -477,24 +485,16 @@ def process_specific_sources():
         output_filename = f"processed_{mp4_file}"
         output_path = os.path.join(input_folder, output_filename)
         
-        # Process the video
-        process_video(file_path, output_path, model,
+        # Process the video from the processed_files folder
+        process_video(destination_path, output_path, model,
                      min_vertical_percent=MIN_VERTICAL_PERCENT,
                      max_vertical_percent=MAX_VERTICAL_PERCENT,
                      wrist_type=WRIST_TYPE,
                      max_shoulder_percent=MAX_SHOULDER_PERCENT)
-        
-        # Move the original file to processed_files folder after completion
-        try:
-            destination_path = os.path.join(processed_folder, mp4_file)
-            shutil.move(file_path, destination_path)
-            print(f"Moved {mp4_file} to {processed_folder}")
-        except Exception as e:
-            print(f"Error moving {mp4_file} to processed folder: {e}")
     
     print(f"\n{'='*60}")
     print(f"All files processed successfully!")
-    print(f"Processed files moved to: {processed_folder}")
+    print(f"Processed files are in: {processed_folder}")
     print(f"{'='*60}")
 
 import time
