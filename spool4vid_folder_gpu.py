@@ -188,25 +188,6 @@ def draw_pose_keypoints(image, keypoints, validation_results=None):
                 cv2.putText(image, f"Vert: {person_results['right']['vertical_percent']:.1f}%", 
                            (200, 105 + person_idx * 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, right_color, 1)
 
-def save_spool_pose_frame_old(frame, frame_count, person_id, validation_results, save_folder="spool_pose"):
-    """Save frame when spool pose is detected"""
-    # Create folder if it doesn't exist
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
-    
-    # Generate filename with timestamp and frame info
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"spool_pose_{timestamp}_frame{frame_count}_person{person_id}.jpg"
-    filepath = os.path.join(save_folder, filename)
-    
-    # Save the frame
-    cv2.imwrite(filepath, frame)
-    print(f"Spool pose detected! Frame saved: {filepath}")
-    
-    # Return the base filename without extension for video clip creation
-    base_filename = f"spool_pose_{timestamp}_frame{frame_count}_person{person_id}"
-    return base_filename
-
 def save_spool_pose_clip(source, start_frame, end_frame, base_filename, save_folder="spool_pose_clips"):
     """Save a video clip when spool pose is detected"""
     # Create folder if it doesn't exist
@@ -244,7 +225,7 @@ def save_spool_pose_clip(source, start_frame, end_frame, base_filename, save_fol
     clip_cap.release()
     clip_writer.release()
     
-    print(f"Spool pose clip saved: {clip_filepath} (frames {start_frame}-{end_frame})")
+    #print(f"Spool pose clip saved: {clip_filepath} (frames {start_frame}-{end_frame})")
 
 def save_spool_pose_frame(frame, frame_count, person_id, validation_results, keypoints, save_folder="spool_pose"):
     """Save frame with overlay result when spool pose is detected"""
@@ -272,7 +253,7 @@ def save_spool_pose_frame(frame, frame_count, person_id, validation_results, key
     
     # Save the frame with overlay
     cv2.imwrite(filepath, frame_with_overlay)
-    print(f"Spool pose detected! Frame saved: {filepath}")
+    #print(f"Spool pose detected! Frame saved: {filepath}")
     
     # Return the base filename without extension for video clip creation
     base_filename = f"spool_pose_{timestamp}_frame{frame_count}_person{person_id}"
@@ -325,7 +306,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             center_region = frame[:, start_x:end_x]
             
             # Perform inference only on the central region
-            results = model(center_region, conf=confidence_threshold)
+            results = model(center_region, conf=confidence_threshold, verbose=False)
             
             # Store validation results for all persons in this frame
             frame_validation_results = []
@@ -399,7 +380,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             cv2.imshow('Pose Detection - Output (Center Area)', frame)
             
             frame_count += 1
-            print(f"Processed frame {frame_count}/{total_frames}, Spool poses: {spool_pose_count}", end='\r')
+            #print(f"Processed frame {frame_count}/{total_frames}, Spool poses: {spool_pose_count}", end='\r')
         
         # Handle key presses
         key = cv2.waitKey(1) & 0xFF
@@ -416,7 +397,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
     cap.release()
     #out.release()
     cv2.destroyAllWindows()
-    print(f"\nProcessing complete! Output saved to: {output_path}")
+    #print(f"\nProcessing complete! Output saved to: {output_path}")
     print(f"Total frames processed: {frame_count}")
     print(f"Total spool poses detected: {spool_pose_count}")
 
