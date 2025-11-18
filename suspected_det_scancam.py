@@ -49,13 +49,23 @@ def create_video_writer(cap, output_path, fps=30):
     
     return out, frame_width, frame_height, fps
 
-def validate_wrist_position(person_kpts, min_percent, max_percent, wrist_type="both"):
+def validate_pose_positions(person_kpts, 
+                          min_wrist_percent, max_wrist_percent, 
+                          min_elbow_percent, max_elbow_percent,
+                          min_knee_percent, max_knee_percent,
+                          wrist_type="both", max_shoulder_percent=30):
     """
-    Validate if wrists are within specified vertical percentage range and horizontal position
+    Validate if wrists, elbows and knees are within specified vertical percentage range and shoulder width
+    This function is extended from the original validate_wrist_position
     """
     validation_results = {
-        "left": {"valid": False, "vertical_percent": 0, "horizontal_valid": False, "message": ""},
-        "right": {"valid": False, "vertical_percent": 0, "horizontal_valid": False, "message": ""}
+        "left": {"valid": False, "vertical_percent": 0, "message": ""},
+        "right": {"valid": False, "vertical_percent": 0, "message": ""},
+        "shoulders": {"valid": False, "horizontal_distance": 0, "message": ""},
+        "left_elbow": {"valid": False, "vertical_percent": 0, "message": ""},
+        "right_elbow": {"valid": False, "vertical_percent": 0, "message": ""},
+        "left_knee": {"valid": False, "vertical_percent": 0, "message": ""},
+        "right_knee": {"valid": False, "vertical_percent": 0, "message": ""}
     }
     
     # Calculate reference levels
@@ -81,6 +91,11 @@ def validate_wrist_position(person_kpts, min_percent, max_percent, wrist_type="b
     if not shoulder_y_values or not hip_y_values:
         validation_results["left"]["message"] = "Missing reference keypoints"
         validation_results["right"]["message"] = "Missing reference keypoints"
+        validation_results["shoulders"]["message"] = "Missing reference keypoints"
+        validation_results["left_elbow"]["message"] = "Missing reference keypoints"
+        validation_results["right_elbow"]["message"] = "Missing reference keypoints"
+        validation_results["left_knee"]["message"] = "Missing reference keypoints"
+        validation_results["right_knee"]["message"] = "Missing reference keypoints"
         return validation_results
     
     shoulder_avg_y = np.mean(shoulder_y_values)
@@ -90,59 +105,111 @@ def validate_wrist_position(person_kpts, min_percent, max_percent, wrist_type="b
     if reference_range <= 0:
         validation_results["left"]["message"] = "Invalid reference range"
         validation_results["right"]["message"] = "Invalid reference range"
+        validation_results["shoulders"]["message"] = "Invalid reference range"
+        validation_results["left_elbow"]["message"] = "Invalid reference range"
+        validation_results["right_elbow"]["message"] = "Invalid reference range"
+        validation_results["left_knee"]["message"] = "Invalid reference range"
+        validation_results["right_knee"]["message"] = "Invalid reference range"
         return validation_results
     
-    # Get shoulder x boundaries
+    # Get shoulder x positions and calculate horizontal distance
     left_shoulder_x = min(shoulder_x_values)
     right_shoulder_x = max(shoulder_x_values)
+    shoulder_horizontal_distance = right_shoulder_x - left_shoulder_x
+    
+    # Validate shoulder horizontal distance
+    shoulder_percent = (shoulder_horizontal_distance / reference_range) * 100
+    validation_results["shoulders"]["horizontal_distance"] = shoulder_percent
+    validation_results["shoulders"]["valid"] = 0 <= shoulder_percent <= max_shoulder_percent
+    
+    if not validation_results["shoulders"]["valid"]:
+        validation_results["shoulders"]["message"] = f"Shoulder distance {shoulder_percent:.1f}% outside range [0, {max_shoulder_percent}]"
+    else:
+        validation_results["shoulders"]["message"] = "Valid"
     
     # Validate left wrist (keypoint 10)
     if wrist_type in ["left", "both"] and len(person_kpts) > 10:
         left_wrist = person_kpts[10]
         if left_wrist[0] > 0 and left_wrist[1] > 0:
             wrist_y = left_wrist[1]
-            wrist_x = left_wrist[0]
             
             vertical_percent = ((wrist_y - shoulder_avg_y) / reference_range) * 100
             validation_results["left"]["vertical_percent"] = vertical_percent
             
-            vertical_valid = min_percent <= vertical_percent <= max_percent
-            horizontal_valid = left_shoulder_x <= wrist_x <= right_shoulder_x
+            vertical_valid = min_wrist_percent <= vertical_percent <= max_wrist_percent
+            validation_results["left"]["valid"] = vertical_valid
             
-            validation_results["left"]["valid"] = vertical_valid and horizontal_valid
-            validation_results["left"]["horizontal_valid"] = horizontal_valid
-            
-            messages = []
-            if not vertical_valid:
-                messages.append(f"vertical position {vertical_percent:.1f}% outside range [{min_percent}, {max_percent}]")
-            if not horizontal_valid:
-                messages.append("horizontal position outside shoulder boundaries")
-            
-            validation_results["left"]["message"] = "Valid" if not messages else ", ".join(messages)
+            validation_results["left"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_wrist_percent}, {max_wrist_percent}]"
     
     # Validate right wrist (keypoint 9)
     if wrist_type in ["right", "both"] and len(person_kpts) > 9:
         right_wrist = person_kpts[9]
         if right_wrist[0] > 0 and right_wrist[1] > 0:
             wrist_y = right_wrist[1]
-            wrist_x = right_wrist[0]
             
             vertical_percent = ((wrist_y - shoulder_avg_y) / reference_range) * 100
             validation_results["right"]["vertical_percent"] = vertical_percent
             
-            vertical_valid = min_percent <= vertical_percent <= max_percent
-            horizontal_valid = left_shoulder_x <= wrist_x <= right_shoulder_x
+            vertical_valid = min_wrist_percent <= vertical_percent <= max_wrist_percent
+            validation_results["right"]["valid"] = vertical_valid
             
-            validation_results["right"]["valid"] = vertical_valid and horizontal_valid
-            validation_results["right"]["horizontal_valid"] = horizontal_valid
+            validation_results["right"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_wrist_percent}, {max_wrist_percent}]"
+    
+    # Validate left elbow (keypoint 7)
+    if len(person_kpts) > 7:
+        left_elbow = person_kpts[7]
+        if left_elbow[0] > 0 and left_elbow[1] > 0:
+            elbow_y = left_elbow[1]
             
-            messages = []
-            if not vertical_valid:
-                messages.append(f"vertical position {vertical_percent:.1f}% outside range [{min_percent}, {max_percent}]")
-            if not horizontal_valid:
-                messages.append("horizontal position outside shoulder boundaries")
+            vertical_percent = ((elbow_y - shoulder_avg_y) / reference_range) * 100
+            validation_results["left_elbow"]["vertical_percent"] = vertical_percent
             
-            validation_results["right"]["message"] = "Valid" if not messages else ", ".join(messages)
+            vertical_valid = min_elbow_percent <= vertical_percent <= max_elbow_percent
+            validation_results["left_elbow"]["valid"] = vertical_valid
+            
+            validation_results["left_elbow"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_elbow_percent}, {max_elbow_percent}]"
+    
+    # Validate right elbow (keypoint 8)
+    if len(person_kpts) > 8:
+        right_elbow = person_kpts[8]
+        if right_elbow[0] > 0 and right_elbow[1] > 0:
+            elbow_y = right_elbow[1]
+            
+            vertical_percent = ((elbow_y - shoulder_avg_y) / reference_range) * 100
+            validation_results["right_elbow"]["vertical_percent"] = vertical_percent
+            
+            vertical_valid = min_elbow_percent <= vertical_percent <= max_elbow_percent
+            validation_results["right_elbow"]["valid"] = vertical_valid
+            
+            validation_results["right_elbow"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_elbow_percent}, {max_elbow_percent}]"
+    
+    # Validate left knee (keypoint 13)
+    if len(person_kpts) > 13:
+        left_knee = person_kpts[13]
+        if left_knee[0] > 0 and left_knee[1] > 0:
+            knee_y = left_knee[1]
+            
+            vertical_percent = ((knee_y - shoulder_avg_y) / reference_range) * 100
+            validation_results["left_knee"]["vertical_percent"] = vertical_percent
+            
+            vertical_valid = min_knee_percent <= vertical_percent <= max_knee_percent
+            validation_results["left_knee"]["valid"] = vertical_valid
+            
+            validation_results["left_knee"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_knee_percent}, {max_knee_percent}]"
+    
+    # Validate right knee (keypoint 14)
+    if len(person_kpts) > 14:
+        right_knee = person_kpts[14]
+        if right_knee[0] > 0 and right_knee[1] > 0:
+            knee_y = right_knee[1]
+            
+            vertical_percent = ((knee_y - shoulder_avg_y) / reference_range) * 100
+            validation_results["right_knee"]["vertical_percent"] = vertical_percent
+            
+            vertical_valid = min_knee_percent <= vertical_percent <= max_knee_percent
+            validation_results["right_knee"]["valid"] = vertical_valid
+            
+            validation_results["right_knee"]["message"] = "Valid" if vertical_valid else f"vertical position {vertical_percent:.1f}% outside range [{min_knee_percent}, {max_knee_percent}]"
     
     return validation_results
 
@@ -160,8 +227,8 @@ def draw_pose_keypoints(image, keypoints, validation_results=None):
     point_color = (0, 255, 0)  # Green for keypoints
     line_color = (255, 0, 0)   # Blue for skeleton lines
     text_color = (0, 0, 255)   # Red for text
-    valid_color = (0, 255, 0)  # Green for valid wrists
-    invalid_color = (0, 0, 255)  # Red for invalid wrists
+    valid_color = (0, 255, 0)  # Green for valid
+    invalid_color = (0, 0, 255)  # Red for invalid
     
     # Draw for each person detected
     for person_idx, person_keypoints in enumerate(keypoints):
@@ -180,7 +247,7 @@ def draw_pose_keypoints(image, keypoints, validation_results=None):
             if not np.isnan(x) and not np.isnan(y):
                 point = (int(x), int(y))
                 # Draw circle for keypoint
-                cv2.circle(image, point, 1, point_color, -1)
+                # cv2.circle(image, point, 1, point_color, -1)
         
         # Draw validation results if available
         if validation_results and person_idx < len(validation_results):
@@ -200,7 +267,7 @@ def draw_pose_keypoints(image, keypoints, validation_results=None):
                         status = "VALID" if result["valid"] else "INVALID"
                         
                         # Draw wrist circle with validation color
-                        cv2.circle(image, (int(x), int(y)), 8, color, 1)
+                        cv2.circle(image, (int(x), int(y-100)), 3, color, 1)
                         
                         # Add validation text
                         text = f"{side}: {status}"
@@ -223,8 +290,11 @@ def save_valid_pose_frame(frame, frame_count, valid_persons_count):
     return filename
 
 def process_video(source, output_path, model, confidence_threshold=0.5, 
-                  min_vertical_percent=15, max_vertical_percent=40, wrist_type="both"):
-    """Process video or RTSP stream and save output with wrist validation"""
+                  min_wrist_percent=-20, max_wrist_percent=30,
+                  min_elbow_percent=0, max_elbow_percent=30,
+                  min_knee_percent=160, max_knee_percent=200,
+                  wrist_type="both", max_shoulder_percent=20):
+    """Process video or RTSP stream and save output with pose validation"""
     
     # Setup video capture
     cap = setup_video_source(source)
@@ -239,7 +309,12 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
     print(f"Processing video: {source}")
     print(f"Output: {output_path}")
     print(f"Resolution: {frame_width}x{frame_height}, FPS: {fps}")
-    print(f"Wrist validation: Vertical [{min_vertical_percent}%, {max_vertical_percent}%], Type: {wrist_type}")
+    print(f"Pose validation parameters:")
+    print(f"  Wrist vertical range: [{min_wrist_percent}%, {max_wrist_percent}%]")
+    print(f"  Elbow vertical range: [{min_elbow_percent}%, {max_elbow_percent}%]")
+    print(f"  Knee vertical range: [{min_knee_percent}%, {max_knee_percent}%]")
+    print(f"  Wrist type: {wrist_type}")
+    print(f"  Max shoulder percent: {max_shoulder_percent}%")
     print("Press 'q' to quit, 'p' to pause")
     
     frame_count = 0
@@ -253,10 +328,10 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
                 print("End of video or failed to read frame")
                 break
             
-            # Calculate the central 50% width area
+            # Calculate the central 80% width area
             height, width = frame.shape[:2]
-            start_x = int(width * 0.25)  # 25% from left
-            end_x = int(width * 0.75)    # 75% from left (so width between is 50%)
+            start_x = int(width * 0.10)  # 25% from left
+            end_x = int(width * 0.90)    # 75% from left (so width between is 50%)
             
             # Extract the central 50% region
             center_region = frame[:, start_x:end_x]
@@ -268,7 +343,7 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
             all_validation_results = []
             valid_persons_in_frame = 0
             
-            # Process results and validate wrists
+            # Process results and validate pose
             for result in results:
                 keypoints = result.keypoints.xy.cpu().numpy()  # x, y coordinates
                 
@@ -290,27 +365,40 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
                     
                     adjusted_keypoints.append(np.array(adjusted_person_kp))
                     
-                    # Validate wrist positions for this person
+                    # Validate pose positions for this person
                     if len(adjusted_person_kp) > 0:
-                        validation = validate_wrist_position(
+                        validation = validate_pose_positions(
                             adjusted_person_kp, 
-                            min_vertical_percent, 
-                            max_vertical_percent,
-                            wrist_type=wrist_type
+                            min_wrist_percent, 
+                            max_wrist_percent,
+                            min_elbow_percent,
+                            max_elbow_percent,
+                            min_knee_percent,
+                            max_knee_percent,
+                            wrist_type=wrist_type,
+                            max_shoulder_percent=max_shoulder_percent
                         )
                         frame_validation_results.append(validation)
                         
-                        # Count valid persons
-                        if wrist_type == "both":
-                            if validation["left"]["valid"] and validation["right"]["valid"]:
-                                valid_persons_in_frame += 1
-                        elif wrist_type == "left" and validation["left"]["valid"]:
-                            valid_persons_in_frame += 1
-                        elif wrist_type == "right" and validation["right"]["valid"]:
+                        # Count valid persons (using the same condition as spool4vid_folder_gpu_eval.py)
+                        if (validation["shoulders"]["valid"] and 
+                            ((wrist_type == "both" and validation["left"]["valid"] and validation["right"]["valid"]) or
+                             (wrist_type == "left" and validation["left"]["valid"]) or
+                             (wrist_type == "right" and validation["right"]["valid"])) and
+                            (validation["left_elbow"]["valid"] or validation["right_elbow"]["valid"]) and
+                            (validation["left_knee"]["valid"] or validation["right_knee"]["valid"])):
                             valid_persons_in_frame += 1
                     
                     else:
-                        frame_validation_results.append({"left": {"valid": False}, "right": {"valid": False}})
+                        frame_validation_results.append({
+                            "left": {"valid": False}, 
+                            "right": {"valid": False},
+                            "shoulders": {"valid": False},
+                            "left_elbow": {"valid": False},
+                            "right_elbow": {"valid": False},
+                            "left_knee": {"valid": False},
+                            "right_knee": {"valid": False}
+                        })
                 
                 all_validation_results.extend(frame_validation_results)
                 
@@ -367,8 +455,11 @@ def process_video(source, output_path, model, confidence_threshold=0.5,
     return True
 
 def process_rtsp_rotation(csv_file, model, confidence_threshold=0.5, 
-                         min_vertical_percent=15, max_vertical_percent=40, 
-                         wrist_type="both", switch_interval=30):
+                         min_wrist_percent=-20, max_wrist_percent=30,
+                         min_elbow_percent=0, max_elbow_percent=30,
+                         min_knee_percent=160, max_knee_percent=200,
+                         wrist_type="both", max_shoulder_percent=20, 
+                         switch_interval=30):
     """Process RTSP streams in rotation, switching every specified interval"""
     
     # Load RTSP addresses from CSV
@@ -468,7 +559,7 @@ def process_rtsp_rotation(csv_file, model, confidence_threshold=0.5,
             # Initialize validation tracking
             valid_persons_in_frame = 0
             
-            # Process results and validate wrists
+            # Process results and validate pose
             for result in results:
                 keypoints = result.keypoints.xy.cpu().numpy()  # x, y coordinates
                 
@@ -489,27 +580,40 @@ def process_rtsp_rotation(csv_file, model, confidence_threshold=0.5,
                     
                     adjusted_keypoints.append(np.array(adjusted_person_kp))
                     
-                    # Validate wrist positions for this person
+                    # Validate pose positions for this person
                     if len(adjusted_person_kp) > 0:
-                        validation = validate_wrist_position(
+                        validation = validate_pose_positions(
                             adjusted_person_kp, 
-                            min_vertical_percent, 
-                            max_vertical_percent,
-                            wrist_type=wrist_type
+                            min_wrist_percent, 
+                            max_wrist_percent,
+                            min_elbow_percent,
+                            max_elbow_percent,
+                            min_knee_percent,
+                            max_knee_percent,
+                            wrist_type=wrist_type,
+                            max_shoulder_percent=max_shoulder_percent
                         )
                         frame_validation_results.append(validation)
                         
-                        # Count valid persons
-                        if wrist_type == "both":
-                            if validation["left"]["valid"] and validation["right"]["valid"]:
-                                valid_persons_in_frame += 1
-                        elif wrist_type == "left" and validation["left"]["valid"]:
-                            valid_persons_in_frame += 1
-                        elif wrist_type == "right" and validation["right"]["valid"]:
+                        # Count valid persons (using the same condition as spool4vid_folder_gpu_eval.py)
+                        if (validation["shoulders"]["valid"] and 
+                            ((wrist_type == "both" and validation["left"]["valid"] and validation["right"]["valid"]) or
+                             (wrist_type == "left" and validation["left"]["valid"]) or
+                             (wrist_type == "right" and validation["right"]["valid"])) and
+                            (validation["left_elbow"]["valid"] or validation["right_elbow"]["valid"]) and
+                            (validation["left_knee"]["valid"] or validation["right_knee"]["valid"])):
                             valid_persons_in_frame += 1
                     
                     else:
-                        frame_validation_results.append({"left": {"valid": False}, "right": {"valid": False}})
+                        frame_validation_results.append({
+                            "left": {"valid": False}, 
+                            "right": {"valid": False},
+                            "shoulders": {"valid": False},
+                            "left_elbow": {"valid": False},
+                            "right_elbow": {"valid": False},
+                            "left_knee": {"valid": False},
+                            "right_knee": {"valid": False}
+                        })
                 
                 # Draw adjusted keypoints on the original frame with validation results
                 draw_pose_keypoints(frame, adjusted_keypoints, frame_validation_results)
@@ -525,7 +629,7 @@ def process_rtsp_rotation(csv_file, model, confidence_threshold=0.5,
             
             # Draw a rectangle to visualize the processing area
             cv2.rectangle(frame, (start_x, 0), (end_x, height), (0, 255, 255), 2)
-            cv2.putText(frame, "Processing Area (Center 50%)", (start_x + 10, 30), 
+            cv2.putText(frame, "Processing Area (Center)", (start_x + 10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             
             # Add RTSP source info to frame
@@ -582,8 +686,11 @@ def process_rtsp_rotation(csv_file, model, confidence_threshold=0.5,
         time.sleep(1)
 
 def process_rtsp_rotation_novideo(csv_file, model, confidence_threshold=0.5, 
-                         min_vertical_percent=15, max_vertical_percent=40, 
-                         wrist_type="both", switch_interval=30):
+                         min_wrist_percent=-20, max_wrist_percent=30,
+                         min_elbow_percent=0, max_elbow_percent=30,
+                         min_knee_percent=160, max_knee_percent=200,
+                         wrist_type="both", max_shoulder_percent=20,
+                         switch_interval=30):
     """Process RTSP streams in rotation, switching every specified interval"""
     
     # Load RTSP addresses from CSV
@@ -650,10 +757,10 @@ def process_rtsp_rotation_novideo(csv_file, model, confidence_threshold=0.5,
                 stream_active = False
                 break
             
-            # Calculate the central 50% width area
+            # Calculate the central 80% width area
             height, width = frame.shape[:2]
-            start_x = int(width * 0.25)  # 25% from left
-            end_x = int(width * 0.75)    # 75% from left (so width between is 50%)
+            start_x = int(width * 0.10)  # 10% from left
+            end_x = int(width * 0.90)    # 90% from left (so width between is 80%)
             
             # Extract the central 50% region
             center_region = frame[:, start_x:end_x]
@@ -664,7 +771,7 @@ def process_rtsp_rotation_novideo(csv_file, model, confidence_threshold=0.5,
             # Initialize validation tracking
             valid_persons_in_frame = 0
             
-            # Process results and validate wrists
+            # Process results and validate pose
             for result in results:
                 keypoints = result.keypoints.xy.cpu().numpy()  # x, y coordinates
                 
@@ -685,27 +792,40 @@ def process_rtsp_rotation_novideo(csv_file, model, confidence_threshold=0.5,
                     
                     adjusted_keypoints.append(np.array(adjusted_person_kp))
                     
-                    # Validate wrist positions for this person
+                    # Validate pose positions for this person
                     if len(adjusted_person_kp) > 0:
-                        validation = validate_wrist_position(
+                        validation = validate_pose_positions(
                             adjusted_person_kp, 
-                            min_vertical_percent, 
-                            max_vertical_percent,
-                            wrist_type=wrist_type
+                            min_wrist_percent, 
+                            max_wrist_percent,
+                            min_elbow_percent,
+                            max_elbow_percent,
+                            min_knee_percent,
+                            max_knee_percent,
+                            wrist_type=wrist_type,
+                            max_shoulder_percent=max_shoulder_percent
                         )
                         frame_validation_results.append(validation)
                         
-                        # Count valid persons
-                        if wrist_type == "both":
-                            if validation["left"]["valid"] and validation["right"]["valid"]:
-                                valid_persons_in_frame += 1
-                        elif wrist_type == "left" and validation["left"]["valid"]:
-                            valid_persons_in_frame += 1
-                        elif wrist_type == "right" and validation["right"]["valid"]:
+                        # Count valid persons (using the same condition as spool4vid_folder_gpu_eval.py)
+                        if (validation["shoulders"]["valid"] and 
+                            ((wrist_type == "both" and validation["left"]["valid"] and validation["right"]["valid"]) or
+                             (wrist_type == "left" and validation["left"]["valid"]) or
+                             (wrist_type == "right" and validation["right"]["valid"])) and
+                            (validation["left_elbow"]["valid"] or validation["right_elbow"]["valid"]) and
+                            (validation["left_knee"]["valid"] or validation["right_knee"]["valid"])):
                             valid_persons_in_frame += 1
                     
                     else:
-                        frame_validation_results.append({"left": {"valid": False}, "right": {"valid": False}})
+                        frame_validation_results.append({
+                            "left": {"valid": False}, 
+                            "right": {"valid": False},
+                            "shoulders": {"valid": False},
+                            "left_elbow": {"valid": False},
+                            "right_elbow": {"valid": False},
+                            "left_knee": {"valid": False},
+                            "right_knee": {"valid": False}
+                        })
                 
                 # Draw adjusted keypoints on the original frame with validation results
                 draw_pose_keypoints(frame, adjusted_keypoints, frame_validation_results)
@@ -721,7 +841,7 @@ def process_rtsp_rotation_novideo(csv_file, model, confidence_threshold=0.5,
             
             # Draw a rectangle to visualize the processing area
             cv2.rectangle(frame, (start_x, 0), (end_x, height), (0, 255, 255), 2)
-            cv2.putText(frame, "Processing Area (Center 50%)", (start_x + 10, 30), 
+            cv2.putText(frame, "Processing Area (Center)", (start_x + 10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             
             # Add RTSP source info to frame
@@ -769,37 +889,62 @@ def process_specific_sources():
     # Load model
     model = YOLO("yolo11s-pose.pt")
     
-    # Wrist validation parameters
-    MIN_VERTICAL_PERCENT = 15
-    MAX_VERTICAL_PERCENT = 35
-    WRIST_TYPE = "both"  # "both", "left", or "right"
+    # Pose validation parameters (same as spool4vid_folder_gpu_eval.py)
+    MIN_WRIST_PERCENT = -20
+    MAX_WRIST_PERCENT = 20
+    MIN_ELBOW_PERCENT = 0
+    MAX_ELBOW_PERCENT = 30
+    MIN_KNEE_PERCENT = 160
+    MAX_KNEE_PERCENT = 200
+    WRIST_TYPE = "both"
+    MAX_SHOULDER_PERCENT = 10
     
     # Option 1: Process MP4 file
     # process_video(r"D:\Downloads\D24_20250528052000.mp4", "output_video.mp4", model,
-    #               min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #               max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #               wrist_type=WRIST_TYPE)
+    #               min_wrist_percent=MIN_WRIST_PERCENT,
+    #               max_wrist_percent=MAX_WRIST_PERCENT,
+    #               min_elbow_percent=MIN_ELBOW_PERCENT,
+    #               max_elbow_percent=MAX_ELBOW_PERCENT,
+    #               min_knee_percent=MIN_KNEE_PERCENT,
+    #               max_knee_percent=MAX_KNEE_PERCENT,
+    #               wrist_type=WRIST_TYPE,
+    #               max_shoulder_percent=MAX_SHOULDER_PERCENT)
     
     # Option 2: Process RTSP rotation from CSV
     rtsp_csv_file = "rtsp_address.csv"
     process_rtsp_rotation_novideo(rtsp_csv_file, model,
-                         min_vertical_percent=MIN_VERTICAL_PERCENT,
-                         max_vertical_percent=MAX_VERTICAL_PERCENT,
+                         min_wrist_percent=MIN_WRIST_PERCENT,
+                         max_wrist_percent=MAX_WRIST_PERCENT,
+                         min_elbow_percent=MIN_ELBOW_PERCENT,
+                         max_elbow_percent=MAX_ELBOW_PERCENT,
+                         min_knee_percent=MIN_KNEE_PERCENT,
+                         max_knee_percent=MAX_KNEE_PERCENT,
                          wrist_type=WRIST_TYPE,
+                         max_shoulder_percent=MAX_SHOULDER_PERCENT,
                          switch_interval=30)  # Switch every 30 seconds
     
     # Option 3: Process single RTSP stream (original functionality)
     # rtsp_url = "rtsp://admin:12345@10.153.62.88"
     # process_video(rtsp_url, "rtsp_output.mp4", model,
-    #               min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #               max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #               wrist_type=WRIST_TYPE)
+    #               min_wrist_percent=MIN_WRIST_PERCENT,
+    #               max_wrist_percent=MAX_WRIST_PERCENT,
+    #               min_elbow_percent=MIN_ELBOW_PERCENT,
+    #               max_elbow_percent=MAX_ELBOW_PERCENT,
+    #               min_knee_percent=MIN_KNEE_PERCENT,
+    #               max_knee_percent=MAX_KNEE_PERCENT,
+    #               wrist_type=WRIST_TYPE,
+    #               max_shoulder_percent=MAX_SHOULDER_PERCENT)
     
     # Option 4: Process webcam (usually index 0)
     # process_video(0, "webcam_output.mp4", model,
-    #               min_vertical_percent=MIN_VERTICAL_PERCENT,
-    #               max_vertical_percent=MAX_VERTICAL_PERCENT,
-    #               wrist_type=WRIST_TYPE)
+    #               min_wrist_percent=MIN_WRIST_PERCENT,
+    #               max_wrist_percent=MAX_WRIST_PERCENT,
+    #               min_elbow_percent=MIN_ELBOW_PERCENT,
+    #               max_elbow_percent=MAX_ELBOW_PERCENT,
+    #               min_knee_percent=MIN_KNEE_PERCENT,
+    #               max_knee_percent=MAX_KNEE_PERCENT,
+    #               wrist_type=WRIST_TYPE,
+    #               max_shoulder_percent=MAX_SHOULDER_PERCENT)
 
 if __name__ == "__main__":
     # Specific sources directly
